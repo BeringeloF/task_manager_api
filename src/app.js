@@ -1,10 +1,10 @@
 import runFirst from './runFirst.js';
 import express from 'express';
 import morgan from 'morgan';
-import taskRouter from './routes/taskRoutes.js';
-import authRouter from './routes/authRoutes.js';
-import errorController from './controller/errorController.js';
-import { sanitizeXss } from './middleware/sanitizeXss.js';
+import taskRoutes from './api/routes/taskRoutes.js';
+import authRoutes from './api/routes/authRoutes.js';
+import errorHandler from './api/errorHandler.js';
+import { sanitizeXss } from './api/middleware/sanitizeXss.js';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
@@ -46,9 +46,9 @@ app.use('/api', limiter);
 
 app.use('/api/v1/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
-app.use('/api/v1/tasks', taskRouter);
-app.use('/api/v1/auth', authRouter);
+taskRoutes(app, '/api/v1/tasks');
+authRoutes(app, '/api/v1/auth');
 
-app.use(errorController);
+app.use(errorHandler);
 
 export default app;

@@ -23,8 +23,6 @@ describe('Integrations Tests', () => {
 
       expect(user.email).to.equal(obj.email);
 
-      expect(user.role).to.equal('tecnico');
-
       expect(user.user_id).to.exist;
     });
 
@@ -34,7 +32,7 @@ describe('Integrations Tests', () => {
         email: 'gerentedeteste@email.com',
         password: 'test1234',
         passwordConfirm: 'test1234',
-        role: 'gerente',
+        role: 'manager',
       };
       const res = await request(app).post('/api/v1/auth/register').send(obj);
 
@@ -45,8 +43,6 @@ describe('Integrations Tests', () => {
       expect(user.name).to.equal(obj.name);
 
       expect(user.email).to.equal(obj.email);
-
-      expect(user.role).to.equal(obj.role);
 
       expect(user.user_id).to.exist;
 
@@ -71,8 +67,6 @@ describe('Integrations Tests', () => {
 
       expect(user.email).to.equal(obj.email);
 
-      expect(user.role).to.equal('tecnico');
-
       expect(user.user_id).to.exist;
       expect(res.body.token).to.exist;
 
@@ -86,14 +80,14 @@ describe('Integrations Tests', () => {
       try {
         console.log('RODANDO AFTER');
 
-        await pool.query('DELETE FROM users WHERE user_id IN ($1, $2)', [
-          tecnico.user_id,
-          gerente.user_id,
-        ]);
-
         await pool.query('DELETE FROM tasks WHERE task_id IN ($1, $2)', [
           tecTask.task_id,
           gerTask.task_id,
+        ]);
+
+        await pool.query('DELETE FROM users WHERE user_id IN ($1, $2)', [
+          tecnico.user_id,
+          gerente.user_id,
         ]);
       } catch (err) {
         console.log('erro ao apager usarios e tarefas', err);
@@ -104,62 +98,33 @@ describe('Integrations Tests', () => {
         title: 'test task',
         description: 'description of test task',
       };
+
+      const objTwo = {
+        title: 'test task for manager to delete',
+        description: 'test task for manager to delete',
+      };
       const res = await request(app)
         .post('/api/v1/tasks')
         .set('Authorization', `Bearer ${tecToken}`)
         .send(obj);
 
+      const resTwo = await request(app)
+        .post('/api/v1/tasks')
+        .set('Authorization', `Bearer ${tecToken}`)
+        .send(objTwo);
+
       expect(res.status).to.equal(201);
 
       expect(res.body.data.title).to.equal(obj.title);
 
       expect(res.body.data.description).to.equal(obj.description);
 
-      expect(res.body.data.assigned_to).to.equal(tecnico.user_id);
+      expect(res.body.data.created_by).to.equal(tecnico.user_id);
 
       expect(res.body.data.task_id).to.exist;
 
       tecTask = res.body.data;
-    });
-
-    it('a manager should be able to create a task', async () => {
-      const obj = {
-        title: 'test task G',
-        description: 'description of test task G',
-        assignedTo: tecnico.user_id,
-      };
-      const res = await request(app)
-        .post('/api/v1/tasks')
-        .set('Authorization', `Bearer ${gerToken}`)
-        .send(obj);
-
-      expect(res.status).to.equal(201);
-
-      expect(res.body.data.title).to.equal(obj.title);
-
-      expect(res.body.data.description).to.equal(obj.description);
-
-      expect(res.body.data.assigned_to).to.equal(tecnico.user_id);
-
-      expect(res.body.data.task_id).to.exist;
-
-      gerTask = res.body.data;
-    });
-
-    it('a manager should not be able to create a task if it is assigned to an user who is not a tecnico', async () => {
-      const obj = {
-        title: 'test task not a tecnico',
-        description: 'description of test task G',
-        assignedTo: gerente.user_id,
-      };
-      const res = await request(app)
-        .post('/api/v1/tasks')
-        .set('Authorization', `Bearer ${gerToken}`)
-        .send(obj);
-
-      expect(res.status).to.equal(403);
-
-      expect(res.body.data).to.not.exist;
+      gerTask = resTwo.body.data;
     });
 
     it('should return an error when description lenght is above the 2500 char limit', async () => {
@@ -190,6 +155,46 @@ describe('Integrations Tests', () => {
       expect(res.body.data).to.not.exist;
     });
 
+    it('a tecnico should be able to get all his created tasks', async () => {
+      const res = await request(app)
+        .get('/api/v1/tasks')
+        .set('Authorization', `Bearer ${tecToken}`);
+
+      expect(res.status).to.equal(200);
+
+      expect(res.body.data[0].title).to.be.equal('test task');
+      expect(res.body.data.length).to.be.equal(2);
+    });
+
+    it('a manager should be able to get all tasks', async () => {
+      const res = await request(app)
+        .get('/api/v1/tasks')
+        .set('Authorization', `Bearer ${gerToken}`);
+
+      expect(res.status).to.equal(200);
+      expect(res.body.data.length).to.be.equal(2);
+    });
+
+    it('a tecnico should be able to get a specific task created by himself', async () => {
+      const res = await request(app)
+        .get(`/api/v1/tasks/${tecTask.task_id}`)
+        .set('Authorization', `Bearer ${tecToken}`);
+
+      expect(res.status).to.equal(200);
+
+      expect(res.body.data.title).to.be.equal('test task');
+    });
+
+    it('a manager should be able to get any specific task', async () => {
+      const res = await request(app)
+        .get(`/api/v1/tasks/${tecTask.task_id}`)
+        .set('Authorization', `Bearer ${gerToken}`);
+
+      expect(res.status).to.equal(200);
+
+      expect(res.body.data.title).to.be.equal('test task');
+    });
+
     it('a tecnico should be able to update a task', async () => {
       const obj = {
         title: 'titulo de teste atualizado',
@@ -198,23 +203,6 @@ describe('Integrations Tests', () => {
       const res = await request(app)
         .patch(`/api/v1/tasks/${tecTask.task_id}`)
         .set('Authorization', `Bearer ${tecToken}`)
-        .send(obj);
-
-      expect(res.status).to.equal(200);
-
-      expect(res.body.data.title).to.equal(obj.title);
-
-      expect(res.body.data.description).to.equal(obj.description);
-    });
-
-    it('a manager should be able to update a task', async () => {
-      const obj = {
-        title: 'titulo de teste atualizado G',
-        description: 'descriçao de teste atualizada G',
-      };
-      const res = await request(app)
-        .patch(`/api/v1/tasks/${gerTask.task_id}`)
-        .set('Authorization', `Bearer ${gerToken}`)
         .send(obj);
 
       expect(res.status).to.equal(200);
@@ -234,20 +222,6 @@ describe('Integrations Tests', () => {
       expect(res.body.data.completed_at).to.not.equal(null);
     });
 
-    //um gerente deve ser capaz de completar tarefas seja as que ele pessoalmente criou ou as criadas por tecnicos
-    //neste caso ele esta completando a tarefa que ele criou e atribui ao tecnico de teste
-    //internamente sera como se o o proprio tecnico a que a task foi atribuida a tivese completado
-    it('a manager should be able to complete a task', async () => {
-      const res = await request(app)
-        .patch(`/api/v1/tasks/complete-task/${gerTask.task_id}`)
-        .set('Authorization', `Bearer ${gerToken}`)
-        .send({ assignedTo: tecnico.user_id });
-
-      expect(res.status).to.equal(200);
-
-      expect(res.body.data.completed_at).to.not.equal(null);
-    });
-
     it('should return an error when trying to complete a task that is alredy completed', async () => {
       const res = await request(app)
         .patch(`/api/v1/tasks/complete-task/${tecTask.task_id}`)
@@ -258,14 +232,12 @@ describe('Integrations Tests', () => {
       expect(res.body.data).to.not.exist;
     });
 
-    it('a tecnico should be able to delete a task', async () => {
+    it('a tecnico should not be able to delete a task', async () => {
       const res = await request(app)
         .delete(`/api/v1/tasks/${tecTask.task_id}`)
         .set('Authorization', `Bearer ${tecToken}`);
 
-      expect(res.status).to.equal(204);
-
-      expect(res.body.data).to.not.exist;
+      expect(res.status).to.equal(403);
     });
 
     it('a manager should be able to delete a task', async () => {
@@ -274,8 +246,6 @@ describe('Integrations Tests', () => {
         .set('Authorization', `Bearer ${gerToken}`);
 
       expect(res.status).to.equal(204);
-
-      expect(res.body.data).to.not.exist;
     });
   });
 });

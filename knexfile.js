@@ -1,4 +1,4 @@
-import runFirst from './runFirst.js';
+import runFirst from './src/runFirst.js';
 
 // Update with your config settings.
 
